@@ -4,6 +4,7 @@ extern crate router;
 extern crate bodyparser;
 extern crate persistent;
 extern crate interface;
+extern crate rustc_serialize;
 
 use iron::prelude::*;
 use iron::status;
@@ -15,60 +16,40 @@ use std::sync::mpsc::{Sender, Receiver};
 use std::error::Error;
 use std::io::prelude::*;
 use std::fs::File;
+use std::fs::OpenOptions;
 use std::path::Path;
 use interface::*;
-
-
-
+use rustc_serialize::json;
 
 pub struct Writer {
+    pub file: File,
     pub tx: Sender<Log>,
     pub rx: Receiver<Log>
 }
 
 impl Writer {
     pub fn new() -> Writer {
+        let path = Path::new("./out/log");
+        let mut file = OpenOptions::new()
+                        .write(true)
+                        .append(true)
+                        .open(&path)
+                        .unwrap();
+        
         let (_tx, _rx): (Sender<Log>, Receiver<Log>) = mpsc::channel();
-        Writer{ tx: _tx, rx: _rx }
+        Writer{ file: file, tx: _tx, rx: _rx }
     }
     
     pub fn get_transmitter(&self) -> Option<Sender<Log>> {
         Some(self.tx.clone())
     }
 
-	pub fn write() {
-        let path = Path::new("out/lorem_ipsum.txt");
-        let display = path.display();
-    
-        // Open a file in write-only mode, returns `io::Result<File>`
-        let mut file = match File::create(&path) {
-            Err(why) => panic!("couldn't create {}: {}",
-                            display,
-                            Error::description(&why)),
-            Ok(file) => file,
-        };
-    
-        // Write the `LOREM_IPSUM` string to `file`, returns `io::Result<()>`
-        match file.write_all("sample string".as_bytes()) {
-            Err(why) => {
-                panic!("couldn't write to {}: {}", display,
-                                                Error::description(&why))
-            },
-            Ok(_) => println!("successfully wrote to {}", display),
+	pub fn write(&mut self) {
+        if let Err(e) = writeln!(self.file, "new log") {
+            println!("{}", e);
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
 
 struct ResponseTime;
 
@@ -112,6 +93,8 @@ fn upload_handler(req: &mut Request) -> IronResult<Response> {
             println!("Parsed body:\n{:?}", log);
             // process the log data...
             
+            open_file_and_append_line(log);
+            
             response_string = String::from("SUCCESS");
         },
         Ok(None) => println!("No body"),
@@ -119,6 +102,21 @@ fn upload_handler(req: &mut Request) -> IronResult<Response> {
     }
 
     Ok(Response::with((status::Ok, response_string)))
+}
+
+fn open_file_and_append_line(log: interface::Log) {
+    let encoded = json::encode(&log).unwrap();
+
+    let path = Path::new("./out/log");
+    let mut file = OpenOptions::new()
+                    .write(true)
+                    .append(true)
+                    .open(&path)
+                    .unwrap();
+                    
+    if let Err(e) = writeln!(file, "{}", &encoded) {
+        println!("{}", e);
+    }
 }
 
 // basic GET request

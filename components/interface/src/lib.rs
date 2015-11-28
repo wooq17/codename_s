@@ -2,6 +2,7 @@ extern crate bincode;
 extern crate rustc_serialize;
 
 use bincode::rustc_serialize::{encode, decode};
+use rustc_serialize::json;
 
 /// default log info
 #[derive(Debug, Clone, RustcEncodable, RustcDecodable)]
@@ -20,7 +21,7 @@ pub struct HttpInformation {
     pub method: String,                     // method (POST, GET ...)
     pub headers: Vec<HttpHeader>,           // http headers (Content-Type: Application/json)
     pub request_body: String,               // request body ({"key":"value"})
-    pub response_code: HttpResponseCode,    // response code (200, 300 ...)
+    pub response_code: String,              // response code (200, 300 ...)
     pub response_body: String,              // response body ({"return_code":"0000"})
     pub response_time: u32,                 // response time (102ms)
     pub log_id: u64,                        // log id
@@ -78,4 +79,33 @@ pub enum LogLevel {
 
 #[test]
 fn it_works() {
+    let mut sample_text_information = TextInformation{ 
+                environment: "alpha".to_string(),
+                source_id: "test".to_string(),
+                level: LogLevel::Debug,
+                description: "test message".to_string(),
+                log_id: 0 };
+                
+    let mut sample_server_information = ServerInformation{ text_information: sample_text_information };
+    let mut sample_extended_information = ExtendedInformation::Server(sample_server_information);
+    let mut sample_http_information = HttpInformation{
+                host: "127.0.0.1".to_string(),
+                url: "/v1/test".to_string(),
+                method: "GET".to_string(),
+                headers: vec![],
+                request_body: "".to_string(),
+                response_code: "0000".to_string(),
+                response_body: "".to_string(),
+                response_time: 81,
+                log_id: 0
+    };
+    let mut sample_log = Log{
+                id: 0,
+                timestamp: 1448705150,
+                http_information: sample_http_information,
+                extended_information: sample_extended_information
+    };
+    
+    let encoded = json::encode(&sample_log).unwrap();
+    println!("{}", encoded);
 }
