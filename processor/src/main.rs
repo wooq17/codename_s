@@ -3,16 +3,72 @@ extern crate time;
 extern crate router;
 extern crate bodyparser;
 extern crate persistent;
-extern crate bincode;
-extern crate rustc_serialize;
+extern crate interface;
 
 use iron::prelude::*;
 use iron::status;
 use iron::{BeforeMiddleware, AfterMiddleware, typemap};
 use router::{Router};
-use persistent::Read;
 use time::precise_time_ns;
-use bincode::rustc_serialize::{encode, decode};
+use std::sync::mpsc;
+use std::sync::mpsc::{Sender, Receiver};
+use std::error::Error;
+use std::io::prelude::*;
+use std::fs::File;
+use std::path::Path;
+use interface::*;
+
+
+
+
+pub struct Writer {
+    pub tx: Sender<Log>,
+    pub rx: Receiver<Log>
+}
+
+impl Writer {
+    pub fn new() -> Writer {
+        let (_tx, _rx): (Sender<Log>, Receiver<Log>) = mpsc::channel();
+        Writer{ tx: _tx, rx: _rx }
+    }
+    
+    pub fn get_transmitter(&self) -> Option<Sender<Log>> {
+        Some(self.tx.clone())
+    }
+
+	pub fn write() {
+        let path = Path::new("out/lorem_ipsum.txt");
+        let display = path.display();
+    
+        // Open a file in write-only mode, returns `io::Result<File>`
+        let mut file = match File::create(&path) {
+            Err(why) => panic!("couldn't create {}: {}",
+                            display,
+                            Error::description(&why)),
+            Ok(file) => file,
+        };
+    
+        // Write the `LOREM_IPSUM` string to `file`, returns `io::Result<()>`
+        match file.write_all("sample string".as_bytes()) {
+            Err(why) => {
+                panic!("couldn't write to {}: {}", display,
+                                                Error::description(&why))
+            },
+            Ok(_) => println!("successfully wrote to {}", display),
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
 
 struct ResponseTime;
 
@@ -33,14 +89,8 @@ impl AfterMiddleware for ResponseTime {
     }
 }
 
-#[derive(Debug, Clone, RustcDecodable)]
-struct profile {
-    name: String,
-    age: String,
-    nickname: Option<String>,
-}
-
-fn log_body(req: &mut Request) -> IronResult<Response> {
+/// upload log data
+fn upload_handler(req: &mut Request) -> IronResult<Response> {
     let body = req.get::<bodyparser::Raw>();
     match body {
         Ok(Some(body)) => println!("Read body:\n{}", body),
@@ -55,12 +105,14 @@ fn log_body(req: &mut Request) -> IronResult<Response> {
         Err(err) => println!("Error: {:?}", err)
     }
 
-    let profile_body = req.get::<bodyparser::Struct<profile>>();
+    let parsed_log = req.get::<bodyparser::Struct<interface::Log>>();
     let mut response_string = String::from("fail");
-    match profile_body {
-        Ok(Some(profile_body)) => {
-            println!("Parsed body:\n{:?}", profile_body);
-            response_string = profile_body.name + " is " + &profile_body.age  + " years old";
+    match parsed_log {
+        Ok(Some(log)) => {
+            println!("Parsed body:\n{:?}", log);
+            // process the log data...
+            
+            response_string = String::from("SUCCESS");
         },
         Ok(None) => println!("No body"),
         Err(err) => println!("Error: {:?}", err)
@@ -69,24 +121,8 @@ fn log_body(req: &mut Request) -> IronResult<Response> {
     Ok(Response::with((status::Ok, response_string)))
 }
 
-const MAX_BODY_LENGTH: usize = 1024 * 1024 * 10;
-
 // basic GET request
-fn get_handler(req: &mut Request) -> IronResult<Response> {
-    println!("[DEBUG] basic GET request");
-    Ok(Response::with((status::Ok, "Hello world!")))
-}
-
-// GET request with query string
-// failed...
-fn get_with_query_handler(req: &mut Request) -> IronResult<Response> {
-    println!("[DEBUG] GET request with query string");
-    let ref query = req.extensions.get::<Router>().unwrap().find("query").unwrap_or("fail to unwrap");
-    Ok(Response::with((status::Ok, *query)))
-}
-
-// basic POST request
-fn pst_handler(req: &mut Request) -> IronResult<Response> {
+fn check_handler(req: &mut Request) -> IronResult<Response> {
     println!("[DEBUG] basic GET request");
     Ok(Response::with((status::Ok, "Hello world!")))
 }
@@ -94,9 +130,8 @@ fn pst_handler(req: &mut Request) -> IronResult<Response> {
 fn main() {
     // create router
     let mut router = Router::new();
-    router.get("/get", get_handler);
-    // router.get("/get_with_query:query", get_with_query_handler);
-    router.post("/post", log_body);
+    router.get("/get", check_handler); // for debug
+    router.put("/log/upload", upload_handler);
 
     // add chain activities
     let mut chain = Chain::new(router);

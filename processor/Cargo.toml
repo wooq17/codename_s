@@ -3,9 +3,6 @@ name = "processor"
 version = "0.1.0"
 authors = ["wooq <wooq@nhnnext.org>"]
 
-[dependencies]
-bincode = "*"
-rustc-serialize = "*"
 
 [dependencies.iron]
 version = "*"
@@ -21,3 +18,6 @@ version = "*"
 
 [dependencies.persistent]
 version = "*"
+
+[dependencies.interface]
+path = "../components/interface"
