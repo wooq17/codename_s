@@ -4,20 +4,12 @@ version = "0.1.0"
 authors = ["wooq <wooq@nhnnext.org>"]
 
 [dependencies]
-bincode = "*"
+iron = "*"
+time = "*"
+router = "*"
+bodyparser = "*"
+persistent = "*"
 rustc-serialize = "*"
 
-[dependencies.iron]
-version = "*"
-
-[dependencies.time]
-version = "*"
-
-[dependencies.router]
-version = "*"
-
-[dependencies.bodyparser]
-version = "*"
-
-[dependencies.persistent]
-version = "*"
+[dependencies.interface]
+path = "../components/interface"
