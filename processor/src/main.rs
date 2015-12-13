@@ -83,7 +83,7 @@ impl AfterMiddleware for ResponseTime {
     }
 }
 
-static mut tx: Option<Sender<Log>> = None;
+static mut TX: Option<Sender<Log>> = None;
 
 fn upload_handler(req: &mut Request) -> IronResult<Response> {
     let body = req.get::<bodyparser::Raw>();
@@ -106,14 +106,16 @@ fn upload_handler(req: &mut Request) -> IronResult<Response> {
         Ok(Some(log)) => {
             println!("Parsed body:\n{:?}", log);
             // process the log data...
+            // ....
             
-            // open_file_and_append_line(log);
-            match tx {
-                Some(transmitter) => { 
-                    let _tx = transmitter.clone();
-                    _tx.send(log); 
-                },
-                _ => { println!("Cannot get the transmitter"); }
+            unsafe {
+                match TX {
+                    Some(transmitter) => { 
+                        let _tx = transmitter.clone();
+                        _tx.send(log); 
+                    },
+                    _ => { println!("Cannot get the transmitter"); }
+                }
             }
             
             response_string = String::from("SUCCESS");
@@ -133,7 +135,7 @@ fn check_handler(req: &mut Request) -> IronResult<Response> {
 
 fn main() {
     let mut writer = Writer::new();
-    unsafe { tx = Some(writer.get_transmitter().unwrap()); }
+    unsafe { TX = Some(writer.get_transmitter().unwrap()); }
     thread::spawn(move|| {
         write_logs(writer);
     });
