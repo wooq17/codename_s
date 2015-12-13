@@ -18,6 +18,7 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::path::Path;
+use std::thread;
 use interface::*;
 use rustc_serialize::json;
 
@@ -44,11 +45,23 @@ impl Writer {
         Some(self.tx.clone())
     }
 
-	pub fn write(&mut self) {
-        if let Err(e) = writeln!(self.file, "new log") {
+	pub fn write(&mut self, log: Log) {
+        let encoded = json::encode(&log).unwrap();
+        
+        if let Err(e) = writeln!(self.file, "{}", &encoded) {
             println!("{}", e);
         }
     }
+    
+    pub fn cycle(&mut self) {
+        loop {
+            self.write(self.rx.recv().unwrap());
+        }
+    }
+}
+
+pub fn write_logs(mut writer: Writer) {
+    writer.cycle();
 }
 
 struct ResponseTime;
@@ -70,7 +83,8 @@ impl AfterMiddleware for ResponseTime {
     }
 }
 
-/// upload log data
+static mut tx: Option<Sender<Log>> = None;
+
 fn upload_handler(req: &mut Request) -> IronResult<Response> {
     let body = req.get::<bodyparser::Raw>();
     match body {
@@ -93,7 +107,14 @@ fn upload_handler(req: &mut Request) -> IronResult<Response> {
             println!("Parsed body:\n{:?}", log);
             // process the log data...
             
-            open_file_and_append_line(log);
+            // open_file_and_append_line(log);
+            match tx {
+                Some(transmitter) => { 
+                    let _tx = transmitter.clone();
+                    _tx.send(log); 
+                },
+                _ => { println!("Cannot get the transmitter"); }
+            }
             
             response_string = String::from("SUCCESS");
         },
@@ -104,21 +125,6 @@ fn upload_handler(req: &mut Request) -> IronResult<Response> {
     Ok(Response::with((status::Ok, response_string)))
 }
 
-fn open_file_and_append_line(log: interface::Log) {
-    let encoded = json::encode(&log).unwrap();
-
-    let path = Path::new("./out/log");
-    let mut file = OpenOptions::new()
-                    .write(true)
-                    .append(true)
-                    .open(&path)
-                    .unwrap();
-                    
-    if let Err(e) = writeln!(file, "{}", &encoded) {
-        println!("{}", e);
-    }
-}
-
 // basic GET request
 fn check_handler(req: &mut Request) -> IronResult<Response> {
     println!("[DEBUG] basic GET request");
@@ -126,10 +132,16 @@ fn check_handler(req: &mut Request) -> IronResult<Response> {
 }
 
 fn main() {
+    let mut writer = Writer::new();
+    unsafe { tx = Some(writer.get_transmitter().unwrap()); }
+    thread::spawn(move|| {
+        write_logs(writer);
+    });
+    
     // create router
     let mut router = Router::new();
     router.get("/get", check_handler); // for debug
-    router.put("/log/upload", upload_handler);
+    router.put("/logs/upload", upload_handler);
 
     // add chain activities
     let mut chain = Chain::new(router);
